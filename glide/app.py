@@ -11,6 +11,7 @@ from panda3d.core import (
     AmbientLight,
     ClockObject,
     DirectionalLight,
+    Filename,
     TextNode,
     Vec3,
     Vec4,
@@ -27,6 +28,19 @@ from .level import legal_moves, slide
 MENU, PLAYING, WIN, DONE = range(4)
 globalClock = ClockObject.get_global_clock()
 
+
+def load_game_font(loader):
+    """Load assets/font.ttf (repo root) and make it the default text font."""
+    try:
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(root, "assets", "font.ttf")
+        font = loader.loadFont(Filename.from_os_specific(path).get_fullpath())
+        if font and font.is_valid():
+            font.set_pixels_per_unit(72)
+            TextNode.set_default_font(font)
+    except Exception:
+        pass
+
 KEY_TO_DIR = {
     "arrow_up": "up", "arrow_down": "down",
     "arrow_left": "left", "arrow_right": "right",
@@ -35,8 +49,10 @@ KEY_TO_DIR = {
 
 
 class GlideApp(ShowBase):
-    def __init__(self, debug=False, smoke=False, shot=False, shot_out=None):
+    def __init__(self, debug=False, smoke=False, shot=False, shot_out=None,
+                 gif=False, gif_dir=None):
         ShowBase.__init__(self)
+        load_game_font(self.loader)
         self.setBackgroundColor(*settings.BG_COLOR)
         self.disableMouse()
         self.render.set_shader_auto()
@@ -44,8 +60,10 @@ class GlideApp(ShowBase):
         self.smoke = smoke
         self.shot = shot
         self.shot_out = shot_out
+        self.gif = gif
+        self.gif_dir = gif_dir
         self.frame_count = 0
-        if smoke or shot:
+        if smoke or shot or gif:
             globalClock.set_mode(ClockObject.M_non_real_time)
             globalClock.set_frame_rate(60)
 
@@ -72,7 +90,7 @@ class GlideApp(ShowBase):
 
         if smoke:
             self.load_level(0)
-        elif shot:
+        elif shot or gif:
             self.load_level(min(3, len(self.level_paths) - 1))
         else:
             self.enter_menu()
@@ -167,7 +185,7 @@ class GlideApp(ShowBase):
         self.state = PLAYING
         self._update_hud()
 
-        if self.smoke or self.shot:
+        if self.smoke or self.shot or self.gif:
             self.auto_solution = solver.solve(self.level, self.player, self.filled)
             self.auto_index = 0
 
@@ -297,7 +315,7 @@ class GlideApp(ShowBase):
             if self.toast_t <= 0 and self.toast_node:
                 self.toast_node.destroy()
                 self.toast_node = None
-        if self.smoke or self.shot:
+        if self.smoke or self.shot or self.gif:
             self._auto_step()
         return task.cont
 
@@ -330,6 +348,24 @@ class GlideApp(ShowBase):
     # -- headless helpers ----------------------------------------------------
     def _auto_step(self):
         self.frame_count += 1
+        if self.gif:
+            # capture every frame (incl. the slide animation) as the solver plays
+            if not self.animating:
+                sol = getattr(self, "auto_solution", None) or []
+                if self.auto_index < len(sol):
+                    self._on_move(sol[self.auto_index])
+                    self.auto_index += 1
+                else:
+                    self._gif_tail = getattr(self, "_gif_tail", 0) + 1
+            os.makedirs(self.gif_dir, exist_ok=True)
+            self.graphicsEngine.render_frame()
+            fn = Filename.from_os_specific(
+                os.path.join(self.gif_dir, "f{:05d}.png".format(self.frame_count))).get_fullpath()
+            self.screenshot(namePrefix=fn, defaultFilename=False)
+            if getattr(self, "_gif_tail", 0) > 24 or self.frame_count > 900:
+                print("GIF FRAMES DONE:", self.gif_dir)
+                sys.exit(0)
+            return
         if self.animating:
             return
         if self.shot:

@@ -14,7 +14,7 @@ Amber **stop-tiles** halt a slide so you can control it. That's the whole game â
 and it produces surprisingly deep puzzles. Unlimited **undo** and a **hint**
 button keep it fair, never frustrating.
 
-![GLIDE](screenshots/glide.png)
+![GLIDE gameplay](media/glide.gif)
 
 ```
 python -m pip install -r requirements.txt
