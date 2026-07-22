@@ -15,3 +15,12 @@ env/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Native build artifacts
+native/build/
+glide/glide_native.dll
+glide/glide_native.so
+glide/glide_native.dylib
+
+# Captured frames / generated media
+screenshots/frames/

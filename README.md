@@ -1,5 +1,7 @@
 # GLIDE
 
+[![CI](https://github.com/uttam12331/glide/actions/workflows/ci.yml/badge.svg)](https://github.com/uttam12331/glide/actions/workflows/ci.yml)
+
 A minimalist **sliding puzzle** built in **Python** with the **Panda3D** engine.
 Not a classic type — an original mechanic from three tiny rules:
 
@@ -59,6 +61,29 @@ solve the resulting level. Each generated board is then re-checked with the
 independent BFS solver and tagged with its par. (Generator in `tools/`; the six
 shipped levels are the solver-vetted output.)
 
+## Optional native C++ solver
+
+The same solver is also implemented in **C++17** ([`native/glide_solver.cpp`](native/glide_solver.cpp))
+and exposed to Python through a tiny C ABI loaded with `ctypes`
+([`glide/native_solver.py`](glide/native_solver.py)). It packs each board state
+into an orb index plus a 64-bit bitmask of lit tiles, so a whole state is a
+single integer key — much faster than the Python set-of-frozensets version. This
+is the hot-path-in-C++, glue-in-Python split that game engines (Panda3D included)
+are built on.
+
+It's **optional**: if the compiled library isn't present, the game and tools
+transparently fall back to the pure-Python solver, so nothing ever breaks.
+
+```bash
+cmake -S native -B native/build && cmake --build native/build --config Release
+python tools/check_native.py   # asserts C++ and Python agree on every level
+python tools/benchmark.py      # times C++ vs Python
+```
+
+The [CI workflow](.github/workflows/ci.yml) builds the extension on Linux **and**
+Windows on every push and fails if the C++ solver ever disagrees with the Python
+one — so the badge above is a live proof that the C++ compiles and stays correct.
+
 ## Project structure
 
 ```
@@ -66,13 +91,19 @@ glide/
 ├── run.py                # entry point + CLI (--smoke / --shot / --debug)
 ├── requirements.txt
 ├── levels/               # six solver-verified levels (JSON ASCII grids + par)
+├── native/               # optional C++ solver extension
+│   ├── glide_solver.cpp  # bitmask BFS with a C ABI for ctypes
+│   └── CMakeLists.txt
+├── tools/                # level generator, native cross-check, benchmark
+├── .github/workflows/    # CI: builds the C++ ext on Linux + Windows
 └── glide/
     ├── app.py            # ShowBase app, state machine, input, slide animation
     ├── level.py          # grid model + the pure slide/fill rules
     ├── solver.py         # BFS solver: verify, hint, par
+    ├── native_solver.py  # ctypes bridge to the C++ solver (+ Python fallback)
     ├── board.py          # tiles, orb, fill animation, pop effects, camera
     ├── hud.py            # HUD + menu / win / stuck overlays
-    ├── geometry.py       # procedural meshes (box, sphere) — no external assets
+    ├── geometry.py       # procedural meshes — no external assets
     └── settings.py       # every tuning constant in one place
 ```
 

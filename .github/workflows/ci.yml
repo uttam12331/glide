@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  native-solver:
+    name: Build C++ extension & verify vs Python
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure (CMake)
+        run: cmake -S native -B native/build
+
+      - name: Build the C++ solver
+        run: cmake --build native/build --config Release
+
+      - name: Verify C++ solver matches the Python solver on every level
+        env:
+          GLIDE_REQUIRE_NATIVE: "1"
+        run: python tools/check_native.py
