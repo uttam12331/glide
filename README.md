@@ -84,8 +84,10 @@ glide/
 - **Logic and animation are separate.** A move updates the logic state instantly;
   the orb animation is pure presentation that lights tiles as it passes. That
   keeps the game deterministic and the solver honest.
-- **Flat-neon tiles, one lit orb.** Tiles are unlit coloured quads (crisp, cheap,
-  readable); only the orb is lit, so it reads as the 3D focal point.
+- **Neon presentation, kept cheap.** Tiles are unlit coloured quads on darker
+  base plates (crisp borders, no per-tile lighting cost); only the orb is lit.
+  A post-process **bloom** filter makes the orb, trail, and filled tiles glow,
+  over a gradient + starfield backdrop and a perspective grid floor.
 - **Levels are data.** ASCII grids in JSON — trivial to author, diff, and verify.
 - **Fair by design.** Unlimited undo + a solver-backed hint mean a player is
   never stuck without a way forward.

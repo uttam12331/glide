@@ -1,6 +1,8 @@
 """GLIDE -- application, state machine, input, and the slide animation."""
 
+import math
 import os
+import random
 import sys
 
 from direct.gui.OnscreenText import OnscreenText
@@ -18,6 +20,7 @@ from . import settings
 from . import level as level_mod
 from . import solver
 from .board import Board
+from .geometry import make_gradient_card, make_points
 from .hud import Hud
 from .level import legal_moves, slide
 
@@ -47,10 +50,13 @@ class GlideApp(ShowBase):
             globalClock.set_frame_rate(60)
 
         self._setup_lights()
+        self._setup_backdrop()
+        self._setup_bloom()
         self.hud = Hud(self)
 
         self.level_paths = level_mod.list_levels()
-        self.level_names = [level_mod.load(p).name for p in self.level_paths]
+        loaded = [level_mod.load(p) for p in self.level_paths]
+        self.menu_levels = [(lv.name, lv.par) for lv in loaded]
         self.best = {}                     # level index -> best move count
 
         self.state = None
@@ -73,13 +79,56 @@ class GlideApp(ShowBase):
 
     def _setup_lights(self):
         amb = AmbientLight("amb")
-        amb.set_color(Vec4(0.45, 0.47, 0.55, 1))
+        amb.set_color(Vec4(0.5, 0.52, 0.6, 1))
         self.render.set_light(self.render.attach_new_node(amb))
         sun = DirectionalLight("sun")
         sun.set_color(Vec4(0.55, 0.58, 0.7, 1))
         sun_np = self.render.attach_new_node(sun)
         sun_np.set_hpr(-30, -60, 0)
         self.render.set_light(sun_np)
+
+    def _setup_backdrop(self):
+        # Gradient sky, fixed to the camera so it always fills the view.
+        sky = make_gradient_card(600, 400, settings.BACKDROP_TOP, settings.BACKDROP_BOTTOM)
+        sky.reparent_to(self.camera)
+        sky.set_pos(0, 250, 0)
+        sky.set_light_off()
+        sky.set_shader_off()               # pass vertex colors straight through
+        sky.set_bin("background", 0)
+        sky.set_depth_write(False)
+        sky.set_depth_test(False)
+
+        # Starfield scattered in world space for a sense of depth.
+        rng = random.Random(5)
+        positions, colors = [], []
+        for _ in range(settings.STAR_COUNT):
+            ang = rng.uniform(0, 2 * math.pi)
+            rad = rng.uniform(60, 220)
+            positions.append((math.cos(ang) * rad, rng.uniform(40, 200),
+                              math.sin(ang) * rad + 30))
+            s = rng.uniform(0.4, 1.0)
+            colors.append(Vec4(s * 0.8, s * 0.9, s, 1))
+        stars = make_points(positions, colors, thickness=2.0)
+        stars.reparent_to(self.render)
+        stars.set_light_off()
+        stars.set_shader_off()
+        stars.set_bin("background", 1)
+        stars.set_depth_write(False)
+
+    def _setup_bloom(self):
+        # Bloom makes the neon tiles, trail, and orb glow. Optional -- if the GPU
+        # can't provide it we simply run without the effect.
+        try:
+            from direct.filter.CommonFilters import CommonFilters
+            self.filters = CommonFilters(self.win, self.cam)
+            ok = self.filters.setBloom(
+                blend=(0.3, 0.4, 0.3, 0.0),
+                mintrigger=settings.BLOOM_MINTRIGGER, maxtrigger=1.0,
+                desat=0.1, intensity=settings.BLOOM_INTENSITY, size=settings.BLOOM_SIZE)
+            if not ok:
+                self.filters = None
+        except Exception:
+            self.filters = None
 
     def _bind_keys(self):
         for key in KEY_TO_DIR:
@@ -99,7 +148,7 @@ class GlideApp(ShowBase):
         self.state = MENU
         self._teardown_level()
         self.hud.clear_playing()
-        self.hud.show_menu(self.level_names)
+        self.hud.show_menu(self.menu_levels)
 
     def load_level(self, index):
         self.hud.clear_overlay()
@@ -225,7 +274,8 @@ class GlideApp(ShowBase):
     def _update_hud(self):
         if self.level is not None:
             self.hud.set_playing(self.level.name, self.moves, self.level.par,
-                                 self.best.get(self.level_index))
+                                 self.best.get(self.level_index),
+                                 len(self.filled), len(self.level.fillable))
 
     def _toast(self, text):
         if self.toast_node:
